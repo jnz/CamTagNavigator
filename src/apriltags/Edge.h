@@ -46,8 +46,8 @@ public:
 
   //! Calculates and inserts up to four edges into 'edges', a vector of Edges.
   static void calcEdges(float theta0, int x, int y,
-			const FloatImage& theta, const FloatImage& mag,
-			std::vector<Edge> &edges, size_t &nEdges);
+            const FloatImage& theta, const FloatImage& mag,
+            std::vector<Edge> &edges, size_t &nEdges);
 
   //! Process edges in order of increasing cost, merging clusters if we can do so without exceeding the thetaThresh.
   static void mergeEdges(std::vector<Edge> &edges, UnionFindSimple &uf, float tmin[], float tmax[], float mmin[], float mmax[]);

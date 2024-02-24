@@ -1,8 +1,11 @@
+/*
+ * Written by Jan Zwiener (jan@zwiener.org)
+ */
+
 #include <stdio.h>
 #include <cmath>
 #include <algorithm>
 #include <iostream>
-#include "Ellip.h"
 #include "camtagnav.h"
 #include "cv2eigen.h"
 
@@ -10,62 +13,7 @@
     Defines
    -------------------------------------------------------------------------- */
 
-#ifndef PI
-static const double PI = 3.14159265358979323846;
-#endif
-static const double TWOPI = 2.0*PI;
-
 static const char* WINDOWNAME = "CamTagNavigator";
-
-/* --------------------------------------------------------------------------
-    Helper functions
-   -------------------------------------------------------------------------- */
-
-/** @brief Get the rotation matrix NED (n-frame) to ECEF frame
-@param[in] llh_rad lat, lon, h (rad,rad,m).
-@param[out] R_n_to_e Output rotation matrix. */
-static void Get_R_n_to_e(const double llh_rad[3], Eigen::Matrix<double, 3, 3>& R_n_to_e)
-{
-    const double sinlat = sin(llh_rad[0]);
-    const double coslat = cos(llh_rad[0]);
-    const double sinlon = sin(llh_rad[1]);
-    const double coslon = cos(llh_rad[1]);
-
-    R_n_to_e(0, 0) = -sinlat*coslon;
-    R_n_to_e(0, 1) = -sinlon;
-    R_n_to_e(0, 2) = -coslat*coslon;
-    R_n_to_e(1, 0) = -sinlat*sinlon;
-    R_n_to_e(1, 1) = coslon;
-    R_n_to_e(1, 2) = -coslat*sinlon;
-    R_n_to_e(2, 0) = coslat;
-    R_n_to_e(2, 1) = 0;
-    R_n_to_e(2, 2) = -sinlat;
-}
-
-/** @brief convert a camera position to a ECEF position. */
-static Eigen::Matrix3d MarkerPosToECEF(
-    const Eigen::Matrix<double, 3, 1> campos_ned_frame,
-    Eigen::Matrix<double, 3, 1>& campos_ecef,
-    double latlonh[3])
-{
-    Eigen::Matrix<double, 3, 1> campos_delta_ecef;
-    Eigen::Matrix3d ned2ecef;
-    Get_R_n_to_e(latlonh, ned2ecef);
-
-    campos_delta_ecef = ned2ecef*campos_ned_frame;
-
-    const double sinlat = sin(latlonh[0]);
-    const double coslat = cos(latlonh[0]);
-    const double sinlon = sin(latlonh[1]);
-    const double coslon = cos(latlonh[1]);
-    const double h = latlonh[2];
-    const double N = ELLIP_c / sqrt(1.0 + ELLIP_e_2*coslat*coslat);
-    campos_ecef(0) = (N+h)*coslat*coslon + campos_delta_ecef(0);
-    campos_ecef(1) = (N+h)*coslat*sinlon + campos_delta_ecef(1);
-    campos_ecef(2) = ((1.0 - ELLIP_e2)*N+h)*sinlat + campos_delta_ecef(2);
-
-    return ned2ecef;
-}
 
 /* --------------------------------------------------------------------------
     CMarkerDB

@@ -24,8 +24,8 @@ int Edge::edgeCost(float  theta0, float theta1, float mag1) {
 }
 
 void Edge::calcEdges(float theta0, int x, int y,
-		     const FloatImage& theta, const FloatImage& mag,
-		     std::vector<Edge> &edges, size_t &nEdges) {
+             const FloatImage& theta, const FloatImage& mag,
+             std::vector<Edge> &edges, size_t &nEdges) {
   int width = theta.getWidth();
   int thisPixel = y*width+x;
 
@@ -46,7 +46,7 @@ void Edge::calcEdges(float theta0, int x, int y,
     edges[nEdges].pixelIdxB = (y+1)*width+x;
     ++nEdges;
   }
-  
+
   // downward diagonal edge
   int cost3 = edgeCost(theta0, theta.get(x+1, y+1), mag.get(x+1,y+1));
   if (cost3 >= 0) {
@@ -67,7 +67,7 @@ void Edge::calcEdges(float theta0, int x, int y,
 }
 
 void Edge::mergeEdges(std::vector<Edge> &edges, UnionFindSimple &uf,
-		      float tmin[], float tmax[], float mmin[], float mmax[]) {
+              float tmin[], float tmax[], float mmin[], float mmax[]) {
   for (size_t i = 0; i < edges.size(); i++) {
     int ida = edges[i].pixelIdxA;
     int idb = edges[i].pixelIdxB;
@@ -103,13 +103,13 @@ void Edge::mergeEdges(std::vector<Edge> &edges, UnionFindSimple &uf,
     // merge these two clusters?
     float costab = (tmaxab - tminab);
     if (costab <= (min(costa, costb) + Edge::thetaThresh/(sza+szb)) &&
-	(mmaxab-mminab) <= min(mmax[ida]-mmin[ida], mmax[idb]-mmin[idb]) + Edge::magThresh/(sza+szb)) {
-	
+    (mmaxab-mminab) <= min(mmax[ida]-mmin[ida], mmax[idb]-mmin[idb]) + Edge::magThresh/(sza+szb)) {
+
       int idab = uf.connectNodes(ida, idb);
-	
+
       tmin[idab] = tminab;
       tmax[idab] = tmaxab;
-	
+
       mmin[idab] = mminab;
       mmax[idab] = mmaxab;
     }
