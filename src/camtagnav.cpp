@@ -1,0 +1,770 @@
+#include <stdio.h>
+#include <cmath>
+#include <algorithm>
+#include <iostream>
+#include "Ellip.h"
+#include "camtagnav.h"
+#include "cv2eigen.h"
+
+/* --------------------------------------------------------------------------
+    Defines
+   -------------------------------------------------------------------------- */
+
+#ifndef PI
+static const double PI = 3.14159265358979323846;
+#endif
+static const double TWOPI = 2.0*PI;
+
+static const char* WINDOWNAME = "CamTagNavigator";
+
+/* --------------------------------------------------------------------------
+    Helper functions
+   -------------------------------------------------------------------------- */
+
+/** @brief Get the rotation matrix NED (n-frame) to ECEF frame
+@param[in] llh_rad lat, lon, h (rad,rad,m).
+@param[out] R_n_to_e Output rotation matrix. */
+static void Get_R_n_to_e(const double llh_rad[3], Eigen::Matrix<double, 3, 3>& R_n_to_e)
+{
+    const double sinlat = sin(llh_rad[0]);
+    const double coslat = cos(llh_rad[0]);
+    const double sinlon = sin(llh_rad[1]);
+    const double coslon = cos(llh_rad[1]);
+
+    R_n_to_e(0, 0) = -sinlat*coslon;
+    R_n_to_e(0, 1) = -sinlon;
+    R_n_to_e(0, 2) = -coslat*coslon;
+    R_n_to_e(1, 0) = -sinlat*sinlon;
+    R_n_to_e(1, 1) = coslon;
+    R_n_to_e(1, 2) = -coslat*sinlon;
+    R_n_to_e(2, 0) = coslat;
+    R_n_to_e(2, 1) = 0;
+    R_n_to_e(2, 2) = -sinlat;
+}
+
+/** @brief convert a camera position to a ECEF position. */
+static Eigen::Matrix3d MarkerPosToECEF(
+    const Eigen::Matrix<double, 3, 1> campos_ned_frame,
+    Eigen::Matrix<double, 3, 1>& campos_ecef,
+    double latlonh[3])
+{
+    Eigen::Matrix<double, 3, 1> campos_delta_ecef;
+    Eigen::Matrix3d ned2ecef;
+    Get_R_n_to_e(latlonh, ned2ecef);
+
+    campos_delta_ecef = ned2ecef*campos_ned_frame;
+
+    const double sinlat = sin(latlonh[0]);
+    const double coslat = cos(latlonh[0]);
+    const double sinlon = sin(latlonh[1]);
+    const double coslon = cos(latlonh[1]);
+    const double h = latlonh[2];
+    const double N = ELLIP_c / sqrt(1.0 + ELLIP_e_2*coslat*coslat);
+    campos_ecef(0) = (N+h)*coslat*coslon + campos_delta_ecef(0);
+    campos_ecef(1) = (N+h)*coslat*sinlon + campos_delta_ecef(1);
+    campos_ecef(2) = ((1.0 - ELLIP_e2)*N+h)*sinlat + campos_delta_ecef(2);
+
+    return ned2ecef;
+}
+
+/* --------------------------------------------------------------------------
+    CMarkerDB
+   -------------------------------------------------------------------------- */
+bool CMarkerDB::LoadFromFile(const char* path)
+{
+    FILE* f = fopen(path, "r");
+    if (!f)
+    {
+        printf("Could not open file: %s\n", path);
+        return false;
+    }
+    char linebuf[1024];
+    int id;
+    double corner[4][3];
+    int i, j;
+    int line = 0;
+
+    while (!feof(f))
+    {
+        line++;
+        if (!fgets(linebuf, sizeof(linebuf), f))
+            continue;
+
+        const int items =
+            sscanf(linebuf, "%i "
+                "%lf %lf %lf "
+                "%lf %lf %lf "
+                "%lf %lf %lf "
+                "%lf %lf %lf ",
+                &id,
+                &corner[0][0], &corner[0][1], &corner[0][2],
+                &corner[1][0], &corner[1][1], &corner[1][2],
+                &corner[2][0], &corner[2][1], &corner[2][2],
+                &corner[3][0], &corner[3][1], &corner[3][2]);
+
+        if (items > 0 && items != 13)
+        {
+            printf("Err on line %i, items %i expected 13: %s\n", line, items, linebuf);
+            continue;
+        }
+
+        marker_t m;
+        m.id = id;
+        for (i = 0; i < 4; i++)
+        {
+            for (j = 0; j < 3; j++)
+            {
+                m.corners[i](j) = corner[i][j];
+            }
+        }
+
+        if (m_marker.find(id) != m_marker.end())
+            printf("Warning duplicated marker id in file: %i\n", id);
+
+        m_marker[id] = m;
+    }
+
+    if (m_marker.size() == 0)
+        printf("No markers found in file\n");
+    return m_marker.size() > 0;
+}
+
+void CamTagNavApp::setTagCodes(std::string s)
+{
+    if (s == "16h5") {
+        m_tagCodes = AprilTags::tagCodes16h5;
+    }
+    else if (s == "25h7") {
+        m_tagCodes = AprilTags::tagCodes25h7;
+    }
+    else if (s == "25h9") {
+        m_tagCodes = AprilTags::tagCodes25h9;
+    }
+    else if (s == "36h9") {
+        m_tagCodes = AprilTags::tagCodes36h9;
+    }
+    else if (s == "36h11") {
+        m_tagCodes = AprilTags::tagCodes36h11;
+    }
+    else {
+        std::cout << "Invalid tag family specified" << endl;
+        exit(1);
+    }
+}
+
+// parse command line options to change default behavior
+void CamTagNavApp::parseOptions(cv::FileStorage& fs_config)
+{
+    if (!fs_config.isOpened())
+        return;
+
+    int robust;
+    int epnp;
+    int useguess;
+    int min_marker_count;
+    int robust_corner_points;
+    float min_marker_area;
+    int show_undist;
+    double minPositionSigma;
+    double pixelDetectionPrecision;
+    double latitude_deg;
+    double longitude_deg;
+    double R_local_to_ned[9];
+    double scaleCovPos;
+    double scaleCovVel;
+
+    try {
+        fs_config["robust"] >> robust;
+        fs_config["robust_alpha"] >> m_robustAlpha;
+        fs_config["robust_max_iter"] >> m_robustMaxIter;
+        fs_config["robust_max_reproj_error"] >> m_robustMaxReprojError;
+        fs_config["robust_corner_points"] >> robust_corner_points;
+        fs_config["scale_width"] >> m_scaleWidth;
+        fs_config["scale_height"] >> m_scaleHeight;
+        fs_config["epnp"] >> epnp;
+        fs_config["use_guess"] >> useguess;
+        fs_config["max_reproj_error"] >> m_largestAcceptableResidual;
+        fs_config["min_marker_count"] >> min_marker_count;
+        fs_config["min_marker_area"] >> min_marker_area;
+        fs_config["show_undist"] >> show_undist;
+        fs_config["min_position_sigma"] >> minPositionSigma;
+        fs_config["pixel_detection_precision"] >> pixelDetectionPrecision;
+
+        fs_config["scale_cov_pos"] >> scaleCovPos;
+        fs_config["scale_cov_vel"] >> scaleCovVel;
+
+        std::string tag_code;
+        fs_config["tag_code"] >> tag_code;
+        if (tag_code.length() > 0)
+        {
+            std::cout << "Setting tag code:" << tag_code << std::endl;
+            setTagCodes(tag_code);
+        }
+        if (epnp > 0)
+        {
+            std::cout << "EPNP mode active" << std::endl;
+            m_solveEPNP = true;
+        }
+        if (m_largestAcceptableResidual < 1.0)
+            m_largestAcceptableResidual = 8.0;
+    }
+    catch (cv::Exception e) {
+    }
+
+    m_useGuess = (useguess != 0);
+    m_robust = (robust != 0);
+    if (m_robustAlpha == 0.0)
+        m_robustAlpha = 0.05;
+    if (m_robustMaxIter == 0.0)
+        m_robustMaxIter = 500;
+    if (m_robustMaxReprojError == 0.0)
+        m_robustMaxReprojError = 4.0;
+    if (m_scaleWidth == 0.0)
+        m_scaleWidth = 1.0;
+    if (m_scaleHeight == 0.0)
+        m_scaleHeight = 1.0;
+    if (min_marker_count > 0)
+        m_minMarkerCount = min_marker_count;
+    if (min_marker_area > 100.0f)
+        m_minMarkerArea = min_marker_area;
+    if (minPositionSigma > 0.0001)
+        m_minPositionSigma = minPositionSigma;
+    if (pixelDetectionPrecision > 0.00001)
+        m_pixelDetectionPrecision = pixelDetectionPrecision;
+
+    m_showUndist = (show_undist > 0);
+    if (robust_corner_points > 0 && robust_corner_points <= 4)
+    {
+        m_ransacCornerPoints = robust_corner_points;
+    }
+
+    // adjust pixel detection precision, based on the image scale
+    const double minScale = min(m_scaleWidth, m_scaleHeight);
+    if (minScale > 0.00001)
+        m_pixelDetectionPrecision *= 1.0 / minScale;
+
+}
+
+void CamTagNavApp::setup()
+{
+    m_tagDetector = new AprilTags::TagDetector(m_tagCodes);
+
+    // prepare window for drawing the camera images
+    if (m_draw) {
+        cv::namedWindow(WINDOWNAME, 1);
+    }
+
+    if (m_robust)
+    {
+        std::cout << "Robust mode ENABLED" << std::endl;
+        std::cout << "Alpha: " << m_robustAlpha*100.0 << "% (1.0 - alpha = " << (1.0 - m_robustAlpha) << ")" << std::endl;
+        std::cout << "Max. reproj error: " << m_robustMaxReprojError << " px" << std::endl;
+    }
+    else
+    {
+        std::cout << "Robust mode DISABLED" << std::endl;
+    }
+    if (m_useGuess)
+    {
+        std::cout << "Use previous position for extrinsic guess" << std::endl;
+    }
+    std::cout << "Max. acceptable position sigma: " << m_minPositionSigma << " m" << std::endl;
+    std::cout << "Max. acceptable reprojection error: " << m_largestAcceptableResidual << " px" << std::endl;
+    std::cout << "Minimum valid marker count: " << m_minMarkerCount << std::endl;
+    std::cout << "Minimum visible marker area: " << m_minMarkerArea << " px*px" << std::endl;
+    std::cout << "Robust corner points: " << m_ransacCornerPoints << std::endl;
+    std::cout << "Pixel detection precision: " << m_pixelDetectionPrecision << " px" << std::endl;
+}
+
+bool CamTagNavApp::loadMarkerDB()
+{
+    const char* pathmarker = "marker.txt";
+    if (!m_marker_db.LoadFromFile(pathmarker))
+    {
+        printf("Error: no marker database found [%s]\n", pathmarker);
+        return false;
+    }
+    return true;
+}
+
+void CamTagNavApp::setupVideo(const cv::Mat& cameraMatrix, const cv::Mat& distCoeffs)
+{
+    m_cameraMatrix = cameraMatrix;
+    m_distCoeffs = distCoeffs;
+}
+
+void CamTagNavApp::calculateResiduals(const std::vector<cv::Point3f>& obj_pts,
+                        const std::vector<cv::Point2f>& img_pts,
+                        const cv::Mat& cameraMatrix,
+                        const cv::Mat& distCoeffs,
+                        const cv::Mat& c_r_w, const cv::Mat& c_t_w,
+                        std::vector<cv::Point2f>& residuals,
+                        Eigen::Matrix<double, 6, 6>* Qxx) const
+{
+    if (obj_pts.size() != img_pts.size())
+        return; // this should not happen
+
+    float u, v;
+    std::vector<cv::Point2f> projPoints;
+    cv::Mat cvJacobian;
+    const bool calcQxx = (Qxx != NULL);
+
+    cv::projectPoints(obj_pts,
+        c_r_w, c_t_w,
+        cameraMatrix, distCoeffs,
+        projPoints,
+        calcQxx ? cvJacobian : cv::noArray());
+    for (int i = 0; i < (int)projPoints.size(); i++)
+    {
+        u = img_pts[i].x - projPoints[i].x;
+        v = img_pts[i].y - projPoints[i].y;
+        residuals.push_back(cv::Point2f(u, v));
+    }
+
+    if (!calcQxx)
+        return;
+
+    // OK, let's calculate the covariance matrix Qxx
+    // 6x6 matrix
+    // rvec (3) tvec(3)
+
+    // Jacobian layout from projectPoints():
+    // (from OpenCV documentation 3.1)
+    // 2*N rows
+    // 10 + ndistCoeffs cols:
+    //   - 3 rvec
+    //   - 3 tvec
+    //   - 2 focal
+    //   - 2 principal point
+
+    // The goal here is to calculate the covariance matrix
+    // for the PnP problem.
+    // projectPoints() returns a full jacobi matrix
+    // but we only care about orientation and translation.
+    // (if not, adjust this code)
+
+    Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> jacobianLarge; // complete jacobian
+    Eigen::Matrix<double, Eigen::Dynamic, 6> jacobian; // only rvec and tvec
+    cv2eigen(cvJacobian, jacobianLarge);
+    const int rows = jacobianLarge.rows();
+    jacobian = jacobianLarge.block(0, 0, rows, 6);
+
+    Eigen::MatrixXd Qxxinv;
+    // for a m_pixelDetectionPrecision of 1, we don't have to create
+    // the identity weight matrix
+    if (m_pixelDetectionPrecision != 1.0)
+    {
+        Eigen::MatrixXd P;
+        P.resize(rows, rows);
+        P.setZero();
+        const double w = 1.0 / (m_pixelDetectionPrecision*m_pixelDetectionPrecision);
+        P.diagonal().setConstant(w);
+        Qxxinv = jacobian.transpose()*P*jacobian;
+    }
+    else
+    {
+        Qxxinv = jacobian.transpose()*jacobian;
+    }
+
+    // finally calculate the Qxx matrix.
+    *Qxx = Qxxinv.inverse();
+}
+
+/* Helper functio for estimatePose(...) */
+bool CamTagNavApp::estimatePoseCore(vector<AprilTags::TagDetection>& detections,
+      Eigen::Matrix<double, 6, 6>& Qxx,
+      bool robust,
+      bool use_guess,
+      int solvePnPflags,
+      cv::Mat& c_r_w,
+      cv::Mat& c_t_w) const
+{
+    const Eigen::Matrix3d R_local_to_opencv =
+        getNedToOpenCvMatrix() * getLocalToNedMatrix();
+
+    std::vector<cv::Point2f> img_pts;
+    std::vector<cv::Point3f> obj_pts;
+    // not every detection is used in the adjustment
+    // save link between adjustment indices to detection ids
+    std::vector<int> point_index_to_detection;
+    // the idea here is to only use n corner points for the ransac
+    // estimation.
+    const int corner_points = robust ? m_ransacCornerPoints : 4;
+
+    // if we not enough markers, check if the covered area is large
+    // enough to estimate a position
+    {
+        float area = 0.0f;
+        int good_markers = 0;
+        for (int i = 0; i < (int)detections.size(); i++) {
+            if (!detections[i].good)
+                continue;
+            if (detections[i].outlier)
+                continue;
+            area += detections[i].pixelArea();
+            good_markers++;
+        }
+        if ((good_markers < m_minMarkerCount) && (area < m_minMarkerArea))
+        {
+            printf("Not enough marker. Count %i/%i, area %.1f/%.1f\n",
+                good_markers, m_minMarkerCount, area, m_minMarkerArea);
+            return false;
+        }
+        if (!robust)
+            printf("A%5.0f ", area);
+    }
+
+    Eigen::Vector3d point3d_opencv;
+    for (int i = 0; i < (int)detections.size(); i++)
+    {
+        const int id = detections[i].id;
+
+        if (!detections[i].good)
+            continue;
+        if (detections[i].outlier)
+            continue;
+
+        // WTF C++?
+        // const std::map<int, marker_t, std::less<int>, Eigen::aligned_allocator<std::pair<const int, marker_t> > >::const_iterator iter =
+        const auto iter =
+            m_marker_db.m_marker.find(id);
+        if (iter == m_marker_db.m_marker.end())
+            continue;
+
+        const marker_t& m = iter->second;
+
+        for (int j = 0; j < corner_points; j++)
+        {
+            img_pts.push_back(cv::Point2d(detections[i].p[j].first,
+                detections[i].p[j].second));
+
+            // transform into OpenCV coordinate system
+            point3d_opencv = R_local_to_opencv * m.corners[j];
+            obj_pts.push_back(cv::Point3d(point3d_opencv.x(),
+                                          point3d_opencv.y(),
+                                          point3d_opencv.z()));
+
+            point_index_to_detection.push_back(i);
+        }
+    }
+    if (obj_pts.empty())
+    {
+        printf("No valid measurements. ");
+        return false;
+    }
+    if (obj_pts.size() != img_pts.size())
+    {
+        printf("3D/2D measurement count wrong. Data error? ");
+        return false;
+    }
+
+    bool result;
+    std::vector<int> inliers;
+    try {
+
+        if (robust)
+        {
+            result =
+                cv::solvePnPRansac(obj_pts,
+                    img_pts,
+                    m_cameraMatrix,
+                    m_distCoeffs,
+                    c_r_w,
+                    c_t_w,
+                    use_guess,
+                    m_robustMaxIter,
+                    (float)m_robustMaxReprojError,
+                    (1.0 - m_robustAlpha),
+                    inliers, solvePnPflags);
+
+            for (int j = 0; j < (int)detections.size(); j++)
+            {
+                detections[j].outlier = true;
+            }
+            for (int j = 0; j < (int)inliers.size(); j++)
+            {
+                detections[point_index_to_detection[j]].outlier = false;
+            }
+        }
+        else
+        {
+            result = cv::solvePnP(obj_pts, img_pts, m_cameraMatrix, m_distCoeffs, c_r_w, c_t_w, use_guess, solvePnPflags);
+        }
+    }
+    catch (...)
+    {
+        printf("Bundle adjustment failed. ");
+        result = false;
+    }
+
+    std::vector<cv::Point2f> residuals;
+    calculateResiduals(obj_pts, img_pts, m_cameraMatrix, m_distCoeffs, c_r_w, c_t_w, residuals, &Qxx);
+    int i = 0;
+    double largest_residual = 0;
+    for (int j = 0; j < (int)residuals.size(); j++)
+    {
+        detections[point_index_to_detection[j]].residuals[i].first = residuals[j].x;
+        detections[point_index_to_detection[j]].residuals[i].second = residuals[j].y;
+
+        i++;
+        if (i >= corner_points)
+            i = 0;
+
+        if (detections[point_index_to_detection[j]].outlier)
+            continue;
+
+        const float du = fabsf(residuals[j].x);
+        const float dv = fabsf(residuals[j].y);
+        if (du > largest_residual)
+            largest_residual = du;
+        if (dv > largest_residual)
+            largest_residual = dv;
+    }
+    if (result)
+    {
+        const float sigmaAbs = sqrtf((float)Qxx(3, 3) +
+                                     (float)Qxx(4, 4) +
+                                     (float)Qxx(5, 5));
+        if (sigmaAbs > (float)m_minPositionSigma)
+        {
+            const float sigmaX = sqrtf((float)Qxx(3, 3));
+            const float sigmaY = sqrtf((float)Qxx(4, 4));
+            const float sigmaZ = sqrtf((float)Qxx(5, 5));
+            printf("Solution accuracy bad: (%.1f %.1f %.1f) %.1f > %.1f\n",
+                sigmaX, sigmaY, sigmaZ, sigmaAbs, (float)m_minPositionSigma);
+            result = false;
+        }
+    }
+
+    if (result == false)
+    {
+        printf("solvePnP failed (%s).", robust ? "robust" : "L2");
+        return false;
+    }
+
+    if (!robust)
+    {
+        if (largest_residual > m_largestAcceptableResidual)
+        {
+            printf("Large residual: %.1f px. ", (float)largest_residual);
+            result = false;
+        }
+    }
+
+    if (!result)
+    {
+        return false;
+    }
+
+    return true;
+}
+
+bool CamTagNavApp::estimatePose(
+    vector<AprilTags::TagDetection>& detections,
+    Eigen::Vector3d& pos,
+    Eigen::Quaterniond& q,
+    Eigen::Matrix<double, 6, 6>& Qxx)
+{
+    cv::Mat c_r_w, c_t_w, c_R_w;
+    c_r_w = m_prevR;
+    c_t_w = m_prevT;
+    const bool use_guess = (m_useGuess &&
+        m_prevT.at<double>(0, 0) != 0.0 &&
+        m_prevT.at<double>(1, 0) != 0.0 &&
+        m_prevT.at<double>(2, 0) != 0.0);
+
+    int solvePnPflags = 0;
+    if (m_solveEPNP)
+        solvePnPflags |= cv::SOLVEPNP_EPNP;
+    else
+        solvePnPflags |= cv::SOLVEPNP_ITERATIVE;
+
+    bool result = estimatePoseCore(detections,
+        Qxx,
+        m_robust,
+        use_guess,
+        solvePnPflags,
+        c_r_w,
+        c_t_w);
+    if (result && m_robust)
+    {
+        result = estimatePoseCore(detections,
+            Qxx,
+            false,
+            use_guess,
+            solvePnPflags,
+            c_r_w,
+            c_t_w);
+    }
+    if (!result)
+        return false;
+
+    m_prevR = c_r_w;
+    m_prevT = c_t_w;
+
+    // c_r_w = rotation from world to camera
+    cv::Rodrigues(c_r_w, c_R_w);
+
+    Eigen::MatrixXd R_opencv_to_cam;
+    cv2eigen(c_R_w, R_opencv_to_cam);
+    Eigen::Matrix3d R_cam_to_opencv = R_opencv_to_cam.transpose();
+    q = R_cam_to_opencv;
+
+    cv::Mat c_T_w(c_t_w);
+    cv::Mat w_R_c(c_R_w.t());
+    cv::Mat w_T_c = -w_R_c * c_T_w;
+    double *pt = w_T_c.ptr<double>();
+    pos = Eigen::Vector3d(pt[0], pt[1], pt[2]);
+
+    return true;
+}
+
+Eigen::Matrix3d CamTagNavApp::getLocalToNedMatrix() const
+{
+    Eigen::Matrix<double, 3, 3> R_local_to_ned_default;
+    R_local_to_ned_default << 1.0,  0.0,  0.0,
+                              0.0,  1.0,  0.0,
+                              0.0,  0.0,  1.0;
+    return R_local_to_ned_default;
+}
+
+Eigen::Matrix3d CamTagNavApp::getNedToOpenCvMatrix() const
+{
+    Eigen::Matrix3d R_ned_to_opencv;
+    R_ned_to_opencv << 0, 1, 0,
+                       0, 0, 1,
+                       1, 0, 0;
+    return R_ned_to_opencv;
+}
+
+void CamTagNavApp::processImage(cv::Mat image)
+{
+    cv::Mat image_gray;
+    const bool rescale_active = m_scaleWidth != 1.0 || m_scaleHeight != 1.0;
+    if (rescale_active)
+    {
+        int width = image.cols;
+        int height = image.rows;
+        // make image smaller to speed up detections
+        cv::Mat tmp = image.clone();
+        cv::Size newsize = cv::Size((int)(width*m_scaleWidth), (int)(height*m_scaleHeight));
+        cv::resize(tmp, image, newsize);
+    }
+
+    cv::cvtColor(image, image_gray, cv::COLOR_BGR2GRAY);
+    vector<AprilTags::TagDetection> detections;
+    detections = m_tagDetector->extractTags(image_gray);
+    // scale up to original pixel values for estimate pose
+    if (rescale_active)
+    {
+        const float sx = 1.0f / (float)m_scaleWidth;
+        const float sy = 1.0f / (float)m_scaleHeight;
+        for (int i = 0; i < (int)detections.size(); i++) {
+            detections[i].cxy.first *= sx;
+            detections[i].cxy.second *= sy;
+            for (int j = 0; j < 4; j++) {
+                detections[i].p[j].first *= sx;
+                detections[i].p[j].second *= sy;
+            }
+        }
+    }
+
+    Eigen::Vector3d camT; // cam pos in local system
+    Eigen::Quaterniond q; // camera to local
+    Eigen::Matrix<double, 6, 6> Qxx;
+
+    bool pos_ok = false;
+    bool vel_ok = false;
+
+    if (m_detectionActive && estimatePose(detections, camT, q, Qxx))
+    {
+        printf("POS %7.3f %7.3f %7.3f ",
+            camT(0), camT(1), camT(2));
+
+        printf("(%5.3f %5.3f %5.3f) ",
+            sqrt(Qxx(0, 0)), sqrt(Qxx(1, 1)), sqrt(Qxx(2, 2)));
+
+        printf("\n");
+
+        // double roll = atan2(R_cam_to_ned(2, 1), R_cam_to_ned(2, 2));
+        // double pitch = asin(-R_cam_to_ned(2, 0));
+        // double yaw = atan2(R_cam_to_ned(1, 0), R_cam_to_ned(0, 0));
+        // printf("RPY %6.1f %6.1f %6.1f ", roll*180.0 / M_PI, pitch*180.0 / M_PI, yaw*180.0 / M_PI);
+    }
+
+    // show the current image including any detections
+    if (m_draw)
+    {
+        int color;
+        cv::cvtColor(image_gray, image, cv::COLOR_GRAY2BGR);
+
+        // scale back to reduced output image
+        const float sx = (float)m_scaleWidth;
+        const float sy = (float)m_scaleHeight;
+        for (int i = 0; i < (int)detections.size(); i++)
+        {
+            if (rescale_active)
+            {
+                detections[i].cxy.first *= sx;
+                detections[i].cxy.second *= sy;
+                for (int j = 0; j < 4; j++) {
+                    detections[i].p[j].first *= sx;
+                    detections[i].p[j].second *= sy;
+                }
+            }
+
+            // also highlight in the image
+            if (m_marker_db.m_marker.find(detections[i].id) == m_marker_db.m_marker.end())
+            {
+                color = 1; // not in db
+            }
+            else
+            {
+                if (detections[i].outlier)
+                    color = 2; // outlier
+                else
+                    color = 0; // everything is ok
+            }
+            if (!detections[i].good)
+                color = 3;
+            detections[i].draw(image, color);
+        }
+    }
+
+    if (m_showUndist)
+    {
+        cv::Mat temp = image.clone();
+        cv::Mat camScaled = m_cameraMatrix.clone();
+        camScaled.at<double>(0, 0) *= m_scaleWidth;
+        camScaled.at<double>(0, 2) *= m_scaleWidth;
+        camScaled.at<double>(1, 1) *= m_scaleHeight;
+        camScaled.at<double>(1, 2) *= m_scaleHeight;
+        cv::undistort(temp, image, camScaled, m_distCoeffs);
+    }
+
+    cv::imshow(WINDOWNAME, image); // OpenCV call
+}
+
+// Load and process a single image
+void CamTagNavApp::loadImages()
+{
+    cv::Mat image;
+
+    for (auto it = m_imgNames.begin(); it != m_imgNames.end(); it++) {
+        image = cv::imread(*it); // load image with opencv
+        if (image.rows < 1 || image.cols < 1)
+        {
+            std::cout << "Could not load image " << *it << std::endl;
+            continue;
+        }
+        processImage(image);
+        while (cv::waitKey(100) == -1) {}
+    }
+}
+
+// Video or image processing?
+bool CamTagNavApp::isVideo()
+{
+    return m_imgNames.empty();
+}
+
