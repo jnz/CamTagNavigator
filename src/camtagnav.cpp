@@ -328,7 +328,7 @@ bool CamTagNavApp::estimatePoseCore(vector<AprilTags::TagDetection>& detections,
       cv::Mat& c_t_w) const
 {
     const Eigen::Matrix3d R_local_to_opencv =
-        getNedToOpenCvMatrix() * getLocalToNedMatrix();
+        getNedToOpenCvMatrix();
 
     std::vector<cv::Point2f> img_pts;
     std::vector<cv::Point3f> obj_pts;
@@ -565,15 +565,6 @@ bool CamTagNavApp::estimatePose(
     pos = Eigen::Vector3d(pt[0], pt[1], pt[2]);
 
     return true;
-}
-
-Eigen::Matrix3d CamTagNavApp::getLocalToNedMatrix() const
-{
-    Eigen::Matrix<double, 3, 3> R_local_to_ned_default;
-    R_local_to_ned_default << 1.0,  0.0,  0.0,
-                              0.0,  1.0,  0.0,
-                              0.0,  0.0,  1.0;
-    return R_local_to_ned_default;
 }
 
 Eigen::Matrix3d CamTagNavApp::getNedToOpenCvMatrix() const
