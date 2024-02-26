@@ -7,6 +7,8 @@ application integrates visual tagging (simply printed on paper) with computer
 vision techniques to offer a robust and accurate positioning system, akin to an
 indoor GPS.
 
+![gif](img/apriltag.gif)
+
 Overview
 --------
 
