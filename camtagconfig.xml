@@ -15,7 +15,6 @@
 <robust_max_reproj_error>3</robust_max_reproj_error>
 <scale_width>0.75</scale_width>
 <scale_height>0.75</scale_height>
-<max_jump>5.0</max_jump>
 <use_guess>1</use_guess>
 <max_reproj_error>8</max_reproj_error>
 <min_marker_count>1</min_marker_count>
