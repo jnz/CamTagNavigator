@@ -34,7 +34,7 @@
     Structs
    -------------------------------------------------------------------------- */
 
-// AprilTag entry from marker_db.txt
+// AprilTag entry from marker.txt
 struct marker_t
 {
     int id; // AprilTag id
@@ -55,6 +55,9 @@ struct position_t
     Marker Database Class
    -------------------------------------------------------------------------- */
 
+/**
+ * Store 4x 3D local coordinates for each marker.
+ */
 class CMarkerDB
 {
 public:
@@ -81,9 +84,6 @@ class CamTagNavApp
     AprilTags::TagCodes m_tagCodes;
 
     bool m_draw; // draw image and April tag detections?
-    bool m_timing; // print timing information for each tag extraction call
-
-    double m_tagSize; // April tag side length in meters of square black frame
 
     std::vector<std::string> m_imgNames; // for post processing. list of strings with image files
 
@@ -156,8 +156,6 @@ public:
         m_tagCodes(AprilTags::tagCodes36h11),
 
         m_draw(true),
-        m_timing(true),
-        m_tagSize(0.163),
 
         m_exposure(-1),
         m_gain(-1),
@@ -209,13 +207,9 @@ public:
 
     void processImage(cv::Mat image);
 
-    bool historyGetStdDev(position_t& mean, position_t& std);
-
-    Eigen::Matrix3d getNedToOpenCvMatrix() const;
-    Eigen::Matrix3d getLocalToNedMatrix() const;
-
-    // Load and process a single image
+    /** Load and process a single image */
     void setImages(const std::vector<std::string> imgNames) { m_imgNames = imgNames; }
+    /** Load images specified by setImage(...) */
     void loadImages();
 
     // Video or image processing?

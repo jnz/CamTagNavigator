@@ -18,6 +18,7 @@ static const char* WINDOWNAME = "CamTagNavigator";
 /* --------------------------------------------------------------------------
     CMarkerDB
    -------------------------------------------------------------------------- */
+
 bool CMarkerDB::LoadFromFile(const char* path)
 {
     FILE* f = fopen(path, "r");
@@ -38,6 +39,7 @@ bool CMarkerDB::LoadFromFile(const char* path)
         if (!fgets(linebuf, sizeof(linebuf), f))
             continue;
 
+        // lower left xyz, lower right xyz, upper right xyz, upper left xyz
         const int items =
             sscanf(linebuf, "%i "
                 "%lf %lf %lf "
@@ -115,11 +117,6 @@ void CamTagNavApp::parseOptions(cv::FileStorage& fs_config)
     int show_undist;
     double minPositionSigma;
     double pixelDetectionPrecision;
-    double latitude_deg;
-    double longitude_deg;
-    double R_local_to_ned[9];
-    double scaleCovPos;
-    double scaleCovVel;
 
     try {
         fs_config["robust"] >> robust;
@@ -137,9 +134,6 @@ void CamTagNavApp::parseOptions(cv::FileStorage& fs_config)
         fs_config["show_undist"] >> show_undist;
         fs_config["min_position_sigma"] >> minPositionSigma;
         fs_config["pixel_detection_precision"] >> pixelDetectionPrecision;
-
-        fs_config["scale_cov_pos"] >> scaleCovPos;
-        fs_config["scale_cov_vel"] >> scaleCovVel;
 
         std::string tag_code;
         fs_config["tag_code"] >> tag_code;
@@ -327,9 +321,6 @@ bool CamTagNavApp::estimatePoseCore(vector<AprilTags::TagDetection>& detections,
       cv::Mat& c_r_w,
       cv::Mat& c_t_w) const
 {
-    const Eigen::Matrix3d R_local_to_opencv =
-        getNedToOpenCvMatrix();
-
     std::vector<cv::Point2f> img_pts;
     std::vector<cv::Point3f> obj_pts;
     // not every detection is used in the adjustment
@@ -387,7 +378,7 @@ bool CamTagNavApp::estimatePoseCore(vector<AprilTags::TagDetection>& detections,
                 detections[i].p[j].second));
 
             // transform into OpenCV coordinate system
-            point3d_opencv = R_local_to_opencv * m.corners[j];
+            point3d_opencv = m.corners[j];
             obj_pts.push_back(cv::Point3d(point3d_opencv.x(),
                                           point3d_opencv.y(),
                                           point3d_opencv.z()));
@@ -565,15 +556,6 @@ bool CamTagNavApp::estimatePose(
     pos = Eigen::Vector3d(pt[0], pt[1], pt[2]);
 
     return true;
-}
-
-Eigen::Matrix3d CamTagNavApp::getNedToOpenCvMatrix() const
-{
-    Eigen::Matrix3d R_ned_to_opencv;
-    R_ned_to_opencv << 0, 1, 0,
-                       0, 0, 1,
-                       1, 0, 0;
-    return R_ned_to_opencv;
 }
 
 void CamTagNavApp::processImage(cv::Mat image)
