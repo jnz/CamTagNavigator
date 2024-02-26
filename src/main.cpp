@@ -77,11 +77,14 @@ static bool init(int argc, char** argv,
     cameraMatrix.at<double>(2, 2) = 1.0;
 
     cv::FileStorage fs_config;
-    try {
+    try
+    {
         fs_config.open(CAMTAGNAV_CONFIG_FILE, cv::FileStorage::READ);
     }
     catch (...)
-    {}
+    {
+        cerr << "Failed to configuration file" << std::endl;
+    }
 
     int deviceId;
     int openPropDialog = 0;
@@ -219,7 +222,8 @@ static bool setupVideo(int deviceId, cv::VideoCapture& cap,
                        bool openPropDialog)
 {
     std::cout << "Opening camera id " << deviceId << "..." << std::endl;
-    try {
+    try
+    {
         cap = cv::VideoCapture(deviceId);
     }
     catch (...) {}
@@ -255,7 +259,7 @@ static void loop(cv::VideoCapture& cap,
 
     int frame = 0;
 
-    while (true)
+    while (true) /* main loop until ESC is pressed */
     {
         bool gotImg = false;
         if (cap.grab())

@@ -7,6 +7,8 @@ application integrates visual tagging (simply printed on paper) with computer
 vision techniques to offer a robust and accurate positioning system, akin to an
 indoor GPS.
 
+Jan Zwiener (jan@zwiener.org)
+
 ![gif](img/apriltag.gif)
 
 Overview
@@ -132,6 +134,7 @@ CamTagNavigator app from the project root directory:
     ./build/camtagnav
 
 It should look something like this:
+
 ![screenshot](img/screenshot.jpg)
 
 Marker Coordinates Database
