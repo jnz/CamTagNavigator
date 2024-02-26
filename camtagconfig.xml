@@ -3,12 +3,16 @@
 <width>640</width>
 <height>480</height>
 <device_id>0</device_id>
-<show_cam_properties>0</show_cam_properties>
 <calibration>calibration.xml</calibration>
+<show_cam_properties>0</show_cam_properties>
 <tag_code>"16h5"</tag_code>
 
 <robust>1</robust>
 <epnp>0</epnp>
+
+<!--
+   -<image_list>input.xml</image_list>
+   -->
 
 <robust_alpha>0.01</robust_alpha>
 <robust_max_iter>800</robust_max_iter>

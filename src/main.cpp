@@ -116,16 +116,16 @@ static bool init(int argc, char** argv,
             "one_extra_view.jpg\n"
             "</images>\n"
             "</opencv_storage>\n";
+        */
         std::string image_list_xml_path;
         fs_config["image_list"] >> image_list_xml_path;
         if (image_list_xml_path.length() > 1)
         {
             std::vector<std::string> list;
-            readStringList(image_list_xml_path, list);
+            xmlReadStringList(image_list_xml_path, list);
             if (list.size() > 0)
                 app.setImages(list);
         }
-        */
 
         fs_config["calibration"] >> calibration_file_path;
         if (calibration_file_path.length() < 1)

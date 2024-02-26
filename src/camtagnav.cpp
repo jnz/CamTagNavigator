@@ -596,9 +596,6 @@ void CamTagNavApp::processImage(cv::Mat image)
     Eigen::Quaterniond q; // camera to local
     Eigen::Matrix<double, 6, 6> Qxx;
 
-    bool pos_ok = false;
-    bool vel_ok = false;
-
     if (m_detectionActive && estimatePose(detections, camT, q, Qxx))
     {
         printf("POS %7.3f %7.3f %7.3f ",
