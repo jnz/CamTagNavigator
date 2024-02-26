@@ -3,8 +3,8 @@
 <width>640</width>
 <height>480</height>
 <device_id>0</device_id>
-<show_cam_properties>1</show_cam_properties>
-<calibration>logitech.xml</calibration>
+<show_cam_properties>0</show_cam_properties>
+<calibration>calibration.xml</calibration>
 <tag_code>"16h5"</tag_code>
 
 <robust>1</robust>
