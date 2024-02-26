@@ -330,7 +330,7 @@ bool CamTagNavApp::estimatePoseCore(vector<AprilTags::TagDetection>& detections,
     // estimation.
     const int corner_points = robust ? m_ransacCornerPoints : 4;
 
-    // if we not enough markers, check if the covered area is large
+    // if we got enough markers, check if the covered area is large
     // enough to estimate a position
     {
         float area = 0.0f;
@@ -363,8 +363,10 @@ bool CamTagNavApp::estimatePoseCore(vector<AprilTags::TagDetection>& detections,
         if (detections[i].outlier)
             continue;
 
-        // WTF C++?
-        // const std::map<int, marker_t, std::less<int>, Eigen::aligned_allocator<std::pair<const int, marker_t> > >::const_iterator iter =
+        // Without 'auto' this would look like this:
+        // const std::map<int, marker_t, std::less<int>,
+        //  Eigen::aligned_allocator<std::pair<const int, marker_t> >
+        //  >::const_iterator iter =
         const auto iter =
             m_marker_db.m_marker.find(id);
         if (iter == m_marker_db.m_marker.end())
@@ -388,7 +390,7 @@ bool CamTagNavApp::estimatePoseCore(vector<AprilTags::TagDetection>& detections,
     }
     if (obj_pts.empty())
     {
-        printf("No valid measurements. ");
+        printf("No valid measurements.\n");
         return false;
     }
     if (obj_pts.size() != img_pts.size())
@@ -642,12 +644,12 @@ void CamTagNavApp::processImage(cv::Mat image)
             else
             {
                 if (detections[i].outlier)
-                    color = 2; // outlier
+                    color = 2; // outlier (red)
                 else
-                    color = 0; // everything is ok
+                    color = 0; // everything is ok (green)
             }
             if (!detections[i].good)
-                color = 3;
+                color = 3; // yellow
             detections[i].draw(image, color);
         }
     }
