@@ -207,7 +207,7 @@ public:
 
     void toggleUndist() { m_showUndist = !m_showUndist;  }
 
-    void processImage(cv::Mat image);
+    cv::Mat processImage(cv::Mat image);
 
     /** Load and process a single image */
     void setImages(const std::vector<std::string> imgNames) { m_imgNames = imgNames; }

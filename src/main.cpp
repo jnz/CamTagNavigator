@@ -1,5 +1,5 @@
 /*
- * Written by Jan Zwiener (jan@zwiener.org)
+ * Written by Jan Zwiener, 2024 (jan@zwiener.org)
  */
 
 /* --------------------------------------------------------------------------
@@ -103,7 +103,7 @@ static bool init(int argc, char** argv,
         // image_list points to a .xml file with file paths:
         // e.g. image_list = "input.xml",
         // xmlReadStringList will read "input.xml"
-        // 
+        //
         /*
             "<?xml version=\"1.0\"?>\n"
             "<opencv_storage>\n"
@@ -184,7 +184,6 @@ static bool init(int argc, char** argv,
                          "(image_width, image_height) is missing." << std::endl;
             return false;
         }
-
     }
 
     if (!app.loadMarkerDB())

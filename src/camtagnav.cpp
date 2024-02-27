@@ -1,5 +1,5 @@
 /*
- * Written by Jan Zwiener (jan@zwiener.org)
+ * Written by Jan Zwiener, 2024 (jan@zwiener.org)
  */
 
 #include <stdio.h>
@@ -16,7 +16,7 @@
 static const char* WINDOWNAME = "CamTagNavigator";
 
 /* --------------------------------------------------------------------------
-    CMarkerDB
+    CMarkerDB (class to load the marker id and corner positions)
    -------------------------------------------------------------------------- */
 
 bool CMarkerDB::LoadFromFile(const char* path)
@@ -78,6 +78,10 @@ bool CMarkerDB::LoadFromFile(const char* path)
         printf("No markers found in file\n");
     return m_marker.size() > 0;
 }
+
+/* --------------------------------------------------------------------------
+    CamTagNavApp (contains the core app logic)
+   -------------------------------------------------------------------------- */
 
 void CamTagNavApp::setTagCodes(std::string s)
 {
@@ -343,7 +347,7 @@ bool CamTagNavApp::estimatePoseCore(vector<AprilTags::TagDetection>& detections,
         int good_markers = 0;
         for (int i = 0; i < (int)detections.size(); i++) {
             if (!detections[i].good)
-                continue;
+               continue;
             if (detections[i].outlier)
                 continue;
             area += detections[i].pixelArea();
@@ -566,7 +570,7 @@ bool CamTagNavApp::estimatePose(
     return true;
 }
 
-void CamTagNavApp::processImage(cv::Mat image)
+cv::Mat CamTagNavApp::processImage(cv::Mat image)
 {
     cv::Mat image_gray;
     const bool rescale_active = m_scaleWidth != 1.0 || m_scaleHeight != 1.0;
@@ -621,7 +625,6 @@ void CamTagNavApp::processImage(cv::Mat image)
     // show the current image including any detections
     if (m_draw)
     {
-        int color;
         // cv::cvtColor(image_gray, image, cv::COLOR_GRAY2BGR);
 
         // scale back to reduced output image
@@ -639,7 +642,9 @@ void CamTagNavApp::processImage(cv::Mat image)
                 }
             }
 
-            // also highlight in the image
+            int color = 0; // everything ok (0 = green)
+            if (!detections[i].good)
+                color = 3; // yellow
             if (m_marker_db.m_marker.find(detections[i].id) == m_marker_db.m_marker.end())
             {
                 color = 1; // not in db
@@ -648,11 +653,7 @@ void CamTagNavApp::processImage(cv::Mat image)
             {
                 if (detections[i].outlier)
                     color = 2; // outlier (red)
-                else
-                    color = 0; // everything is ok (green)
             }
-            if (!detections[i].good)
-                color = 3; // yellow
             detections[i].draw(image, color, m_showResiduals);
         }
     }
@@ -669,23 +670,34 @@ void CamTagNavApp::processImage(cv::Mat image)
     }
 
     cv::imshow(WINDOWNAME, image); // OpenCV call
+    return image;
 }
 
-// Load and process a single image
+/** Post processing: load images specified in config image_list attribute and
+ * process them */
 void CamTagNavApp::loadImages()
 {
     cv::Mat image;
     int key;
+    int idx = 0;
 
-    for (auto it = m_imgNames.begin(); it != m_imgNames.end(); it++) {
-        image = cv::imread(*it); // load image with opencv
+    /* iterate over all specified image file paths: */
+    for (auto it = m_imgNames.begin(); it != m_imgNames.end(); it++)
+    {
+        image = cv::imread(*it);
         if (image.rows < 1 || image.cols < 1)
         {
             std::cout << "Could not load image " << *it << std::endl;
             continue;
         }
-        processImage(image);
-        key = cv::waitKey(50);
+        idx++;
+
+        /* image = */ processImage(image);
+        // char output[128];
+        // sprintf(output, "output_%05i.jpg", idx);
+        // cv::imwrite(output, image);
+
+        key = cv::waitKey(33);
         // while ((key = cv::waitKey(50)) == -1) {}
     }
 }
