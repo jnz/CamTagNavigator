@@ -1,3 +1,10 @@
+# 2024, Jan Zwiener (jan@zwiener.org)
+#
+# Script to calibrate a camera based on a checkerboard pattern.
+#
+# Dependencies:
+#   pip install opencv-python
+
 import cv2
 import numpy as np
 import glob
@@ -76,7 +83,7 @@ elif ret < 2.0:
 else:
     print("Poor calibration result. Consider recalibration.")
 
-# XML structure
+# Write out calibration parameters to XML file
 opencv_storage = ET.Element("opencv_storage")
 ET.SubElement(opencv_storage, "calibration_time").text = f'"{calibration_time}"'
 ET.SubElement(opencv_storage, "image_width").text = str(image_width)

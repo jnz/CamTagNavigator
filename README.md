@@ -78,12 +78,12 @@ a wall.
 
 ![apriltagexample](img/apriltagexample.png)
 
-Calibrate your camera. You can use the python script camcalib.py (make sure you
+Calibrate your camera. You can use the python script `tools/board_calib.py` (make sure you
 have OpenCV for Python installed as well).
 
 Print out the calibration pattern PDF:
 
-    camera-calibration-checker-board_9x7.pdf
+    tools/camera-calibration-checker-board_9x7.pdf
 
 Make sure that the size of a printed out square matches the following variable in
 camcalib.py:
@@ -92,13 +92,13 @@ camcalib.py:
 
 Make sure you also have the Python version of OpenCV installed:
 
-    pip3 install opencv
+    pip3 install opencv-python
 
 Finally run the calibration script. Press the s key to use an image in the preview window
 for the calibration. Collect a bunch of images and finally press q to run the calculation.
 Make sure the reprojection error is below 1.0 pixels for acceptable results.
 
-    python3 camcalib.py
+    python3 tools/board_calib.py
 
 ![calibrationexample](img/calibration.jpg)
 
