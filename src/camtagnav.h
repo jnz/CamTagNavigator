@@ -23,12 +23,15 @@
 
 // OpenCV
 #include "opencv2/opencv.hpp"
+// Project include
+#include "UDPSender.h"
 
 /* --------------------------------------------------------------------------
     Defines
    -------------------------------------------------------------------------- */
 
 #define CAMTAGNAV_CONFIG_FILE "camtagconfig.xml"
+#define CAMTAGNAV_DEF_UDP_PORT 5876
 
 /* --------------------------------------------------------------------------
     Structs
@@ -94,6 +97,11 @@ class CamTagNavApp
 
     int m_deviceId; // OpenCV camera id (in case of multiple cameras)
 
+    std::string m_udpTargetHost; // default = "localhost"
+    int m_udpPort; // target UDP port to stream to
+    CUDPSender m_udpsender;
+    unsigned m_udpMessageCounter;
+
     bool m_detectionActive;
     cv::Mat m_cameraMatrix; // open cv style camera matrix
     cv::Mat m_distCoeffs; // open cv style distortion coefficients
@@ -149,6 +157,9 @@ protected:
         Eigen::Quaterniond& q,
         Eigen::Matrix<double, 6, 6>& Qxx);
 
+    /** Send current position and orientation via UDP */
+    void emitSolution(Eigen::Vector3d pos, Eigen::Quaterniond q);
+
 public:
 
     // default constructor
@@ -178,7 +189,10 @@ public:
         m_minPositionSigma(1.0),
         m_pixelDetectionPrecision(1.0),
         m_detectionActive(true),
-        m_showResiduals(true)
+        m_showResiduals(true),
+        m_udpPort(CAMTAGNAV_DEF_UDP_PORT),
+        m_udpTargetHost("localhost"),
+        m_udpMessageCounter(0)
     {
         printf("OpenCV Version %i.%i\n", CV_MAJOR_VERSION, CV_MINOR_VERSION);
 

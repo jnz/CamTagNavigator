@@ -27,5 +27,7 @@
 <pixel_detection_precision>0.8</pixel_detection_precision>
 <show_undist>0</show_undist>
 <show_residuals>1</show_residuals>
+<udp_host>localhost</udp_host>
+<udp_port>5876</udp_port>
 
 </opencv_storage>

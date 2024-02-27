@@ -36,6 +36,12 @@ static void loop(cv::VideoCapture& cap,
 
 int main(int argc, char* argv[])
 {
+#ifdef _WIN32
+    // Required on Windows to send data over UDP sockets
+    WSAData data;
+    WSAStartup(MAKEWORD(2, 2), &data);
+#endif
+
     CamTagNavApp app;
     cv::VideoCapture cap;
 

@@ -140,6 +140,8 @@ void CamTagNavApp::parseOptions(cv::FileStorage& fs_config)
         fs_config["min_position_sigma"] >> minPositionSigma;
         fs_config["pixel_detection_precision"] >> pixelDetectionPrecision;
         fs_config["show_residuals"] >> showResiduals;
+        fs_config["udp_port"] >> m_udpPort;
+        fs_config["udp_host"] >> m_udpTargetHost;
 
         std::string tag_code;
         fs_config["tag_code"] >> tag_code;
@@ -226,6 +228,9 @@ void CamTagNavApp::setup()
     std::cout << "Minimum visible marker area: " << m_minMarkerArea << " px*px" << std::endl;
     std::cout << "Robust corner points: " << m_ransacCornerPoints << std::endl;
     std::cout << "Pixel detection precision: " << m_pixelDetectionPrecision << " px" << std::endl;
+
+    std::cout << "Sending output to: " << m_udpTargetHost << ":" << m_udpPort << std::endl;
+    m_udpsender.SetRemoteAddr(m_udpTargetHost.c_str(), m_udpPort);
 }
 
 bool CamTagNavApp::loadMarkerDB()
@@ -605,16 +610,21 @@ cv::Mat CamTagNavApp::processImage(cv::Mat image)
     Eigen::Vector3d camT; // cam pos in local system
     Eigen::Quaterniond q; // camera to local
     Eigen::Matrix<double, 6, 6> Qxx;
+    camT.setZero();
+    q.setIdentity();
 
     if (m_detectionActive && estimatePose(detections, camT, q, Qxx))
     {
         printf("POS %7.3f %7.3f %7.3f ",
             camT(0), camT(1), camT(2));
 
+        // Estimated precision:
         printf("(%5.3f %5.3f %5.3f) ",
             sqrt(Qxx(0, 0)), sqrt(Qxx(1, 1)), sqrt(Qxx(2, 2)));
 
         printf("\n");
+
+        emitSolution(camT, q);
 
         // double roll = atan2(R_cam_to_ned(2, 1), R_cam_to_ned(2, 2));
         // double pitch = asin(-R_cam_to_ned(2, 0));
@@ -706,5 +716,22 @@ void CamTagNavApp::loadImages()
 bool CamTagNavApp::isVideo()
 {
     return m_imgNames.empty();
+}
+
+void CamTagNavApp::emitSolution(Eigen::Vector3d pos, Eigen::Quaterniond q)
+{
+    char send_buffer[1024];
+    m_udpMessageCounter++;
+    double timestamp_sec = 0.0; // FIXME implement this
+
+    snprintf(send_buffer, sizeof(send_buffer),
+            "%.3f, %u, %.4f, %.4f, %.4f, "
+            "%.5f, %.5f, %.5f, %.5f",
+            timestamp_sec,
+            m_udpMessageCounter,
+            pos(0), pos(1), pos(2),
+            q.w(), q.x(), q.y(), q.z());
+
+    m_udpsender.Send((unsigned char*)send_buffer, strlen(send_buffer));
 }
 
