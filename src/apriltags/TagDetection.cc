@@ -153,7 +153,7 @@ void TagDetection::getRelativeTranslationRotation(double tag_size, double fx, do
 }
 
 // draw one April tag detection on actual image
-void TagDetection::draw(cv::Mat& image, int color) const {
+void TagDetection::draw(cv::Mat& image, int color, bool draw_residuals) const {
   // use corner points detected by line intersection
   std::pair<float, float> p1 = p[0];
   std::pair<float, float> p2 = p[1];
@@ -209,10 +209,13 @@ void TagDetection::draw(cv::Mat& image, int color) const {
               cv::Point2f(cxy.first + textOffset, cxy.second + textOffset + 20),
               cv::FONT_HERSHEY_PLAIN, fontScale*0.75, cv::Scalar(255,0,255));
 
-  cv::line(image, cv::Point2f(p1.first, p1.second), cv::Point2f(p1.first - residuals[0].first, p1.second - residuals[0].second), cv::Scalar(0, 0, 255, 0), 1, cv::LINE_AA);
-  cv::line(image, cv::Point2f(p2.first, p2.second), cv::Point2f(p2.first - residuals[1].first, p2.second - residuals[1].second), cv::Scalar(0, 0, 255, 0), 1, cv::LINE_AA);
-  cv::line(image, cv::Point2f(p3.first, p3.second), cv::Point2f(p3.first - residuals[2].first, p3.second - residuals[2].second), cv::Scalar(0, 0, 255, 0), 1, cv::LINE_AA);
-  cv::line(image, cv::Point2f(p4.first, p4.second), cv::Point2f(p4.first - residuals[3].first, p4.second - residuals[3].second), cv::Scalar(0, 0, 255, 0), 1, cv::LINE_AA);
+  if (draw_residuals)
+  {
+      cv::line(image, cv::Point2f(p1.first, p1.second), cv::Point2f(p1.first - residuals[0].first, p1.second - residuals[0].second), cv::Scalar(0, 0, 255, 0), 1, cv::LINE_AA);
+      cv::line(image, cv::Point2f(p2.first, p2.second), cv::Point2f(p2.first - residuals[1].first, p2.second - residuals[1].second), cv::Scalar(0, 0, 255, 0), 1, cv::LINE_AA);
+      cv::line(image, cv::Point2f(p3.first, p3.second), cv::Point2f(p3.first - residuals[2].first, p3.second - residuals[2].second), cv::Scalar(0, 0, 255, 0), 1, cv::LINE_AA);
+      cv::line(image, cv::Point2f(p4.first, p4.second), cv::Point2f(p4.first - residuals[3].first, p4.second - residuals[3].second), cv::Scalar(0, 0, 255, 0), 1, cv::LINE_AA);
+  }
 }
 
 } // namespace

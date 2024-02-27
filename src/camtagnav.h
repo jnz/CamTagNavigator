@@ -115,6 +115,7 @@ class CamTagNavApp
     bool m_showUndist;
     double m_pixelDetectionPrecision; // for covariance estimation: how accurate can we detect pixels (one sigma). faster calculation if set to 1.0
     double m_minPositionSigma; // if a solution sigma is larger than this, reject the solution
+    bool m_showResiduals; // plot 4 lines where the marker corner was expected to be in the image
 
 protected:
     /* Helper function for estimatePose to calculate the residuals in
@@ -176,7 +177,8 @@ public:
         m_showUndist(false),
         m_minPositionSigma(1.0),
         m_pixelDetectionPrecision(1.0),
-        m_detectionActive(true)
+        m_detectionActive(true),
+        m_showResiduals(true)
     {
         printf("OpenCV Version %i.%i\n", CV_MAJOR_VERSION, CV_MINOR_VERSION);
 

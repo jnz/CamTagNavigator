@@ -117,6 +117,7 @@ void CamTagNavApp::parseOptions(cv::FileStorage& fs_config)
     int show_undist;
     double minPositionSigma;
     double pixelDetectionPrecision;
+    int showResiduals;
 
     try {
         fs_config["robust"] >> robust;
@@ -134,6 +135,7 @@ void CamTagNavApp::parseOptions(cv::FileStorage& fs_config)
         fs_config["show_undist"] >> show_undist;
         fs_config["min_position_sigma"] >> minPositionSigma;
         fs_config["pixel_detection_precision"] >> pixelDetectionPrecision;
+        fs_config["show_residuals"] >> showResiduals;
 
         std::string tag_code;
         fs_config["tag_code"] >> tag_code;
@@ -148,7 +150,10 @@ void CamTagNavApp::parseOptions(cv::FileStorage& fs_config)
             m_solveEPNP = true;
         }
         if (m_largestAcceptableResidual < 1.0)
+        {
             m_largestAcceptableResidual = 8.0;
+        }
+        m_showResiduals = (showResiduals != 0);
     }
     catch (cv::Exception e) {
     }
@@ -192,7 +197,8 @@ void CamTagNavApp::setup()
     m_tagDetector = new AprilTags::TagDetector(m_tagCodes);
 
     // prepare window for drawing the camera images
-    if (m_draw) {
+    if (m_draw)
+    {
         cv::namedWindow(WINDOWNAME, 1);
     }
 
@@ -616,7 +622,7 @@ void CamTagNavApp::processImage(cv::Mat image)
     if (m_draw)
     {
         int color;
-        cv::cvtColor(image_gray, image, cv::COLOR_GRAY2BGR);
+        // cv::cvtColor(image_gray, image, cv::COLOR_GRAY2BGR);
 
         // scale back to reduced output image
         const float sx = (float)m_scaleWidth;
@@ -647,7 +653,7 @@ void CamTagNavApp::processImage(cv::Mat image)
             }
             if (!detections[i].good)
                 color = 3; // yellow
-            detections[i].draw(image, color);
+            detections[i].draw(image, color, m_showResiduals);
         }
     }
 
@@ -669,6 +675,7 @@ void CamTagNavApp::processImage(cv::Mat image)
 void CamTagNavApp::loadImages()
 {
     cv::Mat image;
+    int key;
 
     for (auto it = m_imgNames.begin(); it != m_imgNames.end(); it++) {
         image = cv::imread(*it); // load image with opencv
@@ -678,7 +685,8 @@ void CamTagNavApp::loadImages()
             continue;
         }
         processImage(image);
-        while (cv::waitKey(100) == -1) {}
+        key = cv::waitKey(50);
+        // while ((key = cv::waitKey(50)) == -1) {}
     }
 }
 
