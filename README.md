@@ -1,6 +1,8 @@
 CamTagNavigator
 ===============
 
+![logo](img/logo_small.png)
+
 Welcome to CamTagNavigator, a simple but robust solution designed for precise
 indoor navigation using a monocamera (e.g. USB webcam) setup and AprilTags. This
 application integrates visual tagging (simply printed on paper) with computer
