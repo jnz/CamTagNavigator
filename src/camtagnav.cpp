@@ -129,8 +129,6 @@ void CamTagNavApp::parseOptions(cv::FileStorage& fs_config)
         fs_config["robust_max_iter"] >> m_robustMaxIter;
         fs_config["robust_max_reproj_error"] >> m_robustMaxReprojError;
         fs_config["robust_corner_points"] >> robust_corner_points;
-        fs_config["scale_width"] >> m_scaleWidth;
-        fs_config["scale_height"] >> m_scaleHeight;
         fs_config["epnp"] >> epnp;
         fs_config["use_guess"] >> useguess;
         fs_config["max_reproj_error"] >> m_largestAcceptableResidual;
@@ -138,7 +136,6 @@ void CamTagNavApp::parseOptions(cv::FileStorage& fs_config)
         fs_config["min_marker_area"] >> min_marker_area;
         fs_config["show_undist"] >> show_undist;
         fs_config["min_position_sigma"] >> minPositionSigma;
-        fs_config["pixel_detection_precision"] >> pixelDetectionPrecision;
         fs_config["show_residuals"] >> showResiduals;
         fs_config["udp_port"] >> m_udpPort;
         fs_config["udp_host"] >> m_udpTargetHost;
@@ -172,10 +169,6 @@ void CamTagNavApp::parseOptions(cv::FileStorage& fs_config)
         m_robustMaxIter = 500;
     if (m_robustMaxReprojError == 0.0)
         m_robustMaxReprojError = 4.0;
-    if (m_scaleWidth == 0.0)
-        m_scaleWidth = 1.0;
-    if (m_scaleHeight == 0.0)
-        m_scaleHeight = 1.0;
     if (min_marker_count > 0)
         m_minMarkerCount = min_marker_count;
     if (min_marker_area > 100.0f)
@@ -190,16 +183,11 @@ void CamTagNavApp::parseOptions(cv::FileStorage& fs_config)
     {
         m_ransacCornerPoints = robust_corner_points;
     }
-
-    // adjust pixel detection precision, based on the image scale
-    const double minScale = min(m_scaleWidth, m_scaleHeight);
-    if (minScale > 0.00001)
-        m_pixelDetectionPrecision *= 1.0 / minScale;
-
 }
 
-void CamTagNavApp::setup()
+void CamTagNavApp::setup(double avg_reprojection_error)
 {
+    m_pixelDetectionPrecision = avg_reprojection_error;
     m_tagDetector = new AprilTags::TagDetector(m_tagCodes);
 
     // prepare window for drawing the camera images
@@ -578,34 +566,10 @@ bool CamTagNavApp::estimatePose(
 cv::Mat CamTagNavApp::processImage(cv::Mat image)
 {
     cv::Mat image_gray;
-    const bool rescale_active = m_scaleWidth != 1.0 || m_scaleHeight != 1.0;
-    if (rescale_active)
-    {
-        int width = image.cols;
-        int height = image.rows;
-        // make image smaller to speed up detections
-        cv::Mat tmp = image.clone();
-        cv::Size newsize = cv::Size((int)(width*m_scaleWidth), (int)(height*m_scaleHeight));
-        cv::resize(tmp, image, newsize);
-    }
 
     cv::cvtColor(image, image_gray, cv::COLOR_BGR2GRAY);
     vector<AprilTags::TagDetection> detections;
     detections = m_tagDetector->extractTags(image_gray);
-    // scale up to original pixel values for estimate pose
-    if (rescale_active)
-    {
-        const float sx = 1.0f / (float)m_scaleWidth;
-        const float sy = 1.0f / (float)m_scaleHeight;
-        for (int i = 0; i < (int)detections.size(); i++) {
-            detections[i].cxy.first *= sx;
-            detections[i].cxy.second *= sy;
-            for (int j = 0; j < 4; j++) {
-                detections[i].p[j].first *= sx;
-                detections[i].p[j].second *= sy;
-            }
-        }
-    }
 
     Eigen::Vector3d camT; // cam pos in local system
     Eigen::Quaterniond q; // camera to local
@@ -637,21 +601,8 @@ cv::Mat CamTagNavApp::processImage(cv::Mat image)
     {
         // cv::cvtColor(image_gray, image, cv::COLOR_GRAY2BGR);
 
-        // scale back to reduced output image
-        const float sx = (float)m_scaleWidth;
-        const float sy = (float)m_scaleHeight;
         for (int i = 0; i < (int)detections.size(); i++)
         {
-            if (rescale_active)
-            {
-                detections[i].cxy.first *= sx;
-                detections[i].cxy.second *= sy;
-                for (int j = 0; j < 4; j++) {
-                    detections[i].p[j].first *= sx;
-                    detections[i].p[j].second *= sy;
-                }
-            }
-
             int color = 0; // everything ok (0 = green)
             if (!detections[i].good)
                 color = 3; // yellow
@@ -671,12 +622,7 @@ cv::Mat CamTagNavApp::processImage(cv::Mat image)
     if (m_showUndist)
     {
         cv::Mat temp = image.clone();
-        cv::Mat camScaled = m_cameraMatrix.clone();
-        camScaled.at<double>(0, 0) *= m_scaleWidth;
-        camScaled.at<double>(0, 2) *= m_scaleWidth;
-        camScaled.at<double>(1, 1) *= m_scaleHeight;
-        camScaled.at<double>(1, 2) *= m_scaleHeight;
-        cv::undistort(temp, image, camScaled, m_distCoeffs);
+        cv::undistort(temp, image, m_cameraMatrix, m_distCoeffs);
     }
 
     cv::imshow(WINDOWNAME, image); // OpenCV call

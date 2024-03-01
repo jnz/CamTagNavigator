@@ -67,22 +67,16 @@ static bool init(int argc, char** argv,
                  cv::VideoCapture& cap,
                  CamTagNavApp& app)
 {
-    const int def_width = 640;
-    const int def_height = 480;
     int width, height;
     std::string calibration_file_path;
+    int deviceId;
+    int openPropDialog = 0;
+    double avg_reprojection_error = 1.0;
 
     cv::Mat cameraMatrix = cv::Mat(3, 3, CV_64FC1, cv::Scalar::all(0));
     cv::Mat distCoeffs = cv::Mat(5, 1, CV_64FC1, cv::Scalar::all(0));
-
-    // some (random) default camera attributes
-    cameraMatrix.at<double>(0, 0) = 600;
-    cameraMatrix.at<double>(1, 1) = 600;
-    cameraMatrix.at<double>(0, 2) = def_width/2;
-    cameraMatrix.at<double>(1, 2) = def_height/2;
-    cameraMatrix.at<double>(2, 2) = 1.0;
-
     cv::FileStorage fs_config;
+
     try
     {
         fs_config.open(CAMTAGNAV_CONFIG_FILE, cv::FileStorage::READ);
@@ -92,18 +86,10 @@ static bool init(int argc, char** argv,
         cerr << "Failed to configuration file" << std::endl;
     }
 
-    int deviceId;
-    int openPropDialog = 0;
     if (fs_config.isOpened())
     {
         fs_config["show_cam_properties"] >> openPropDialog;
-        fs_config["width"] >> width;
-        fs_config["height"] >> height;
         fs_config["device_id"] >> deviceId;
-        if (width == 0)
-            width = def_width;
-        if (height == 0)
-            height = def_height;
 
         // check if the user wants to process a list of files (e.g. pngs)
         // image_list points to a .xml file with file paths:
@@ -147,7 +133,6 @@ static bool init(int argc, char** argv,
 
     std::cout << "Calibration file path: " << calibration_file_path << std::endl;
 
-    int calib_width, calib_height;
     cv::FileStorage fs;
     try {
         fs.open(calibration_file_path, cv::FileStorage::READ);
@@ -167,8 +152,9 @@ static bool init(int argc, char** argv,
             fs["distortion_coefficients"] >> distCoeffs;
             std::cout << "camera matrix: " << std::endl << cameraMatrix << std::endl;
             std::cout << "dist coeffs: " << std::endl << distCoeffs.t() << std::endl;
-            fs["image_width"] >> calib_width;
-            fs["image_height"] >> calib_height;
+            fs["image_width"] >> width;
+            fs["image_height"] >> height;
+            fs["avg_reprojection_error"] >> avg_reprojection_error;
 
             std::string calib_time;
             fs["calibration_time"] >> calib_time;
@@ -176,7 +162,6 @@ static bool init(int argc, char** argv,
                 std::cout << "Calibration date: " << calib_time << endl;
             else
                 std::cout << "Calibration date unknown." << endl;
-
         }
         catch (cv::Exception e)
         {
@@ -184,7 +169,7 @@ static bool init(int argc, char** argv,
             return false;
         }
 
-        if (calib_width == 0 || calib_height == 0)
+        if (width < 10 || height < 10)
         {
             std::cout << "Invalid config file. Calibration width and height "
                          "(image_width, image_height) is missing." << std::endl;
@@ -207,16 +192,8 @@ static bool init(int argc, char** argv,
         }
     }
 
-    // Scale cameraMatrix for actual resolution
-    const double scale_x = width / calib_width;
-    const double scale_y = height / calib_height;
-    cameraMatrix.at<double>(0, 0) *= scale_x;
-    cameraMatrix.at<double>(1, 1) *= scale_y;
-    cameraMatrix.at<double>(0, 2) *= scale_x;
-    cameraMatrix.at<double>(1, 2) *= scale_y;
-
     app.parseOptions(fs_config);
-    app.setup();
+    app.setup(avg_reprojection_error);
     app.setupVideo(cameraMatrix, distCoeffs);
 
     return true;

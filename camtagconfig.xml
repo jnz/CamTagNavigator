@@ -1,7 +1,5 @@
 <?xml version="1.0"?>
 <opencv_storage>
-<width>640</width>
-<height>480</height>
 <device_id>0</device_id>
 <calibration>calibration.xml</calibration>
 <show_cam_properties>0</show_cam_properties>
@@ -17,14 +15,11 @@
 <robust_alpha>0.01</robust_alpha>
 <robust_max_iter>800</robust_max_iter>
 <robust_max_reproj_error>3</robust_max_reproj_error>
-<scale_width>0.75</scale_width>
-<scale_height>0.75</scale_height>
 <use_guess>1</use_guess>
-<max_reproj_error>8</max_reproj_error>
+<max_reproj_error>16</max_reproj_error>
 <min_marker_count>1</min_marker_count>
 <min_position_sigma>0.5</min_position_sigma>
 <min_marker_area>250</min_marker_area>
-<pixel_detection_precision>0.8</pixel_detection_precision>
 <show_undist>0</show_undist>
 <show_residuals>1</show_residuals>
 <udp_host>localhost</udp_host>

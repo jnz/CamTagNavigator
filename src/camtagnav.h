@@ -112,8 +112,6 @@ class CamTagNavApp
     int m_robustMaxIter;
     double m_robustMaxReprojError;
     int m_ransacCornerPoints; // how many corner points are used for solvePnPRansac
-    double m_scaleWidth;
-    double m_scaleHeight;
     cv::Mat m_prevR; // previous rotation for solvePnP
     cv::Mat m_prevT; // previous translation for solvePnP
     bool m_useGuess; // use previous position for solvePnP
@@ -181,8 +179,6 @@ public:
         m_useGuess(false),
         m_largestAcceptableResidual(0.0),
         m_ransacCornerPoints(4),
-        m_scaleWidth(1.0),
-        m_scaleHeight(1.0),
         m_minMarkerCount(1),
         m_minMarkerArea(2000.0f),
         m_showUndist(false),
@@ -213,7 +209,7 @@ public:
     // parse command line options to change default behavior
     void parseOptions(cv::FileStorage& fs_config);
 
-    void setup();
+    void setup(double avg_reprojection_error);
 
     bool loadMarkerDB();
 
